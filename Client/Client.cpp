@@ -15,7 +15,7 @@ using namespace std;
 #define DEFAULT_BUFLEN 512
 #define DEFAULT_PORT "27015"
 
-#define PAUSE 1000
+#define PAUSE 0
 
 int main(int argc, char** argv) // ім'я сервера при бажанні можна буде вказати через параметри командного рядка
 {
@@ -30,7 +30,7 @@ int main(int argc, char** argv) // ім'я сервера при бажанні 
 
     setlocale(0, "Ukrainian");
     system("title CLIENT SIDE");
-    cout << "the client process is started!\n";
+    //cout << "the client process is started!\n";
     Sleep(PAUSE);
 
     /////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -43,7 +43,7 @@ int main(int argc, char** argv) // ім'я сервера при бажанні 
         return 11;
     }
     else {
-        cout << "connection to Winsock.dll was successful!\n";
+        //cout << "connection to Winsock.dll was successful!\n";
         Sleep(PAUSE);
     }
 
@@ -68,7 +68,7 @@ int main(int argc, char** argv) // ім'я сервера при бажанні 
         return 12;
     }
     else {
-        cout << "obtaining the client address and port was successful!\n";
+        //cout << "obtaining the client address and port was successful!\n";
         Sleep(PAUSE);
     }
 
@@ -96,7 +96,7 @@ int main(int argc, char** argv) // ім'я сервера при бажанні 
             continue;
         }
 
-        cout << "creation of a socket on the client was successful!\n";
+        //cout << "creation of a socket on the client was successful!\n";
         Sleep(PAUSE);
 
         break;
@@ -119,8 +119,10 @@ int main(int argc, char** argv) // ім'я сервера при бажанні 
     /////////////////////////////////////////////////////////////////////////////////////////////////////////
 
     // відправка початкового буфера
-    const char* message = "hello from client!";
-    iResult = send(ConnectSocket, message, (int)strlen(message), 0);
+    char message[DEFAULT_BUFLEN];
+    cout << "Enter message: ";
+    cin.getline(message, DEFAULT_BUFLEN);
+    iResult = send(ConnectSocket, message, strlen(message), 0);
     if (iResult == SOCKET_ERROR) {
         cout << "send failed with error: " << WSAGetLastError() << "\n";
         closesocket(ConnectSocket);
@@ -129,7 +131,7 @@ int main(int argc, char** argv) // ім'я сервера при бажанні 
     }
     else {
         cout << "data has been successfully sent to the server: " << message << "\n";
-        cout << "bytes sent from the client: " << iResult << "\n";
+        //cout << "bytes sent from the client: " << iResult << "\n";
         Sleep(PAUSE);
     }
 
@@ -144,7 +146,7 @@ int main(int argc, char** argv) // ім'я сервера при бажанні 
         return 16;
     }
     else {
-        cout << "the client process initiates closing the connection with the server.\n";
+        //cout << "the client process initiates closing the connection with the server.\n";
     }
 
     /////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -159,7 +161,7 @@ int main(int argc, char** argv) // ім'я сервера при бажанні 
 
         if (iResult > 0) {
             cout << "the server process sent a response: " << answer << "\n";
-            cout << "bytes received: " << iResult << "\n";
+            //cout << "bytes received: " << iResult << "\n";
         }
         else if (iResult == 0)
             cout << "the connection to the server is closed.\n";

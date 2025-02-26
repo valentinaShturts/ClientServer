@@ -18,13 +18,13 @@ using namespace std;
 #define DEFAULT_BUFLEN 512
 #define DEFAULT_PORT "27015" // порт — це логічна конструкція, яка ідентифікує конкретний процес або тип мережевої служби - https://en.wikipedia.org/wiki/Port_(computer_networking)
 
-#define PAUSE 1000
+#define PAUSE 0
 
 int main()
 {
     setlocale(0, "Ukrainian");
     system("title SERVER SIDE");
-    cout << "the server process is started!\n";
+    //cout << "the server process is started!\n";
     Sleep(PAUSE);
 
     //////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -38,7 +38,7 @@ int main()
         return 1;
     }
     else {
-        cout << "Winsock.dll connection was successful!\n";
+        //cout << "Winsock.dll connection was successful!\n";
         Sleep(PAUSE);
     }
 
@@ -61,7 +61,7 @@ int main()
         return 2;
     }
     else {
-        cout << "receiving the server address and port was successful!\n";
+        //cout << "receiving the server address and port was successful!\n";
         Sleep(PAUSE);
     }
 
@@ -79,7 +79,7 @@ int main()
         return 3;
     }
     else {
-        cout << "creation of a socket on the server was successful!\n";
+        //cout << "creation of a socket on the server was successful!\n";
         Sleep(PAUSE);
     }
 
@@ -96,7 +96,7 @@ int main()
         return 4;
     }
     else {
-        cout << "the implementation of the socket by IP address was successful!\n";
+        //cout << "the implementation of the socket by IP address was successful!\n";
         Sleep(PAUSE);
     }
 
@@ -149,7 +149,7 @@ int main()
         if (iResult > 0) {
             cout << "the client process sent a message: " << message << "\n";
             Sleep(PAUSE);
-            cout << "bytes received: " << iResult << "\n";
+            //cout << "bytes received: " << iResult << "\n";
             Sleep(PAUSE);
 
             //////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -172,7 +172,7 @@ int main()
                 return 7;
             }
             else {
-                cout << "bytes sent: " << iSendResult << "\n";
+                //cout << "bytes sent: " << iSendResult << "\n";
                 Sleep(PAUSE);
             }
         }
