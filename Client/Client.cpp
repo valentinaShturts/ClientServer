@@ -75,12 +75,15 @@ int main(int argc, char** argv)
     }
 
 
+
     while (true)
     {
         char message[DEFAULT_BUFLEN];
-        cout << "Enter message: ";
+        cout << "Enter a number (or 'exit' to quit): ";
         cin.getline(message, DEFAULT_BUFLEN);
+
         iResult = send(ConnectSocket, message, strlen(message), 0);
+
         if (iResult == SOCKET_ERROR) {
             closesocket(ConnectSocket);
             WSACleanup();
@@ -95,11 +98,10 @@ int main(int argc, char** argv)
         if (iResult > 0) {
             cout << "the server process sent a response: " << answer << "\n";
         }
-        else if (iResult == 0)
-            cout << "the connection to the server is closed.\n";
-
-        if (strcmp(answer, "bye, client!") == 0) break;
-        
+        else 
+        {
+            break;
+        }
     }
 
     iResult = shutdown(ConnectSocket, SD_SEND);

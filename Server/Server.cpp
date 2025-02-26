@@ -4,6 +4,7 @@
 #include <windows.h>
 // #include <winsock2.h>
 #include <ws2tcpip.h>
+#include <cstdlib>
 using namespace std;
 
 #pragma comment (lib, "Ws2_32.lib")
@@ -84,23 +85,22 @@ int main()
         char message[DEFAULT_BUFLEN];
 
         iResult = recv(ClientSocket, message, DEFAULT_BUFLEN, 0); 
-        message[iResult] = '\0';
 
         if (iResult > 0) {
+            message[iResult] = '\0';
             cout << "the client process sent a message: " << message << "\n";
-            const char* answer;
 
-            if (strcmp(message, "hello") == 0) answer = "yo, client!";
-            else if (strcmp(message, "how is it going") == 0) answer = "fine, client!";
-            else if (strcmp(message, "is the pizza delicious?") == 0) answer = "sure is, client!";
-            else if (strcmp(message, "goodbye") == 0) answer = "bye, client!";
-            else
-            {
-                answer = "what are you talking about, client?";
-            }
+            if (strcmp(message, "exit") == 0) break;
+
+            int receivedNumber = atoi(message);  
+            receivedNumber++; 
+
+            char answer[DEFAULT_BUFLEN];
+            _itoa_s(receivedNumber, answer, 10);  
+
             cout << "the server process sends a response: " << answer << "\n";
 
-            int iSendResult = send(ClientSocket, answer, strlen(answer), 0); 
+            int iSendResult = send(ClientSocket, answer, (int)strlen(answer), 0);
 
             if (iSendResult == SOCKET_ERROR) {
                 closesocket(ClientSocket);
@@ -113,17 +113,15 @@ int main()
         }
         else if (iResult == 0) {
             cout << "the connection is closed...\n";
-            Sleep(PAUSE);
         }
         else {
-            cout << "recv failed with error: " << WSAGetLastError() << "\n";
-            cout << "oops, receipt (recv) of the corresponding message did not occur ((\n";
             closesocket(ClientSocket);
             WSACleanup();
             return 8;
         }
 
     } while (iResult > 0);
+
 
     iResult = shutdown(ClientSocket, SD_SEND); 
     if (iResult == SOCKET_ERROR) {
