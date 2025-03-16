@@ -1,188 +1,150 @@
-﻿
-#define WIN32_LEAN_AND_MEAN
+﻿#define WIN32_LEAN_AND_MEAN
 
 #include <iostream>
 #include <windows.h>
-// #include <winsock2.h>
 #include <ws2tcpip.h>
-#include <shellapi.h> 
-#include <tlhelp32.h>
 using namespace std;
 
 #pragma comment (lib, "Ws2_32.lib")
 #pragma comment (lib, "Mswsock.lib")
 #pragma comment (lib, "AdvApi32.lib")
-#pragma comment(lib, "Shell32.lib")
 
 #define DEFAULT_BUFLEN 512
 #define DEFAULT_PORT "27015"
-#define SERVER_EXE L"C:\\Users\\Valentina\\source\\repos\\op\\x64\\Debug\\Server.exe"
 
-#define PAUSE 0
+#define PAUSE 1
 
+// спроба підключитися до адреси, поки не вдасться
+SOCKET ConnectSocket = INVALID_SOCKET;
 
-bool IsServerRunning() 
+DWORD WINAPI Sender(void* param)
 {
-    PROCESSENTRY32 pe32;
-    HANDLE hProcessSnap = CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS, 0);
-    if (hProcessSnap == INVALID_HANDLE_VALUE) {
-        return false;
-    }
+	while (true)
+	{
+		// відправити початковий буфер
+		char* message = new char[200];
+		cout << "Please enter your message for server: ";
+		cin.getline(message, 199);
 
-    pe32.dwSize = sizeof(PROCESSENTRY32);
-    if (!Process32First(hProcessSnap, &pe32)) {
-        CloseHandle(hProcessSnap);
-        return false;
-    }
-
-    do {
-        if (wcscmp(pe32.szExeFile, SERVER_EXE) == 0) {
-            CloseHandle(hProcessSnap);
-            return true;
-        }
-    } while (Process32Next(hProcessSnap, &pe32));
-
-    CloseHandle(hProcessSnap);
-    return false;
+		int iResult = send(ConnectSocket, message, (int)strlen(message), 0);
+		if (iResult == SOCKET_ERROR) {
+			cout << "error of sending: " << WSAGetLastError() << "\n";
+			closesocket(ConnectSocket);
+			WSACleanup();
+			return 15;
+		}
+		else {
+			cout << "data successfully sent to the server: " << message << "\n";
+			// cout << "байтів з клієнта надіслано: " << iResult << "\n";
+			delete[] message;
+			Sleep(PAUSE);
+		}
+	}
+	return 0;
 }
 
-
-bool StartServer() 
+DWORD WINAPI Receiver(void* param)
 {
-    if (IsServerRunning()) 
-    {
-        cout << "Server is already running!" << endl;
-        return true;
-    }
+	while (true)
+	{
+		// приймати дані, поки співрозмовник не закриє з'єднання
+		char answer[DEFAULT_BUFLEN];
 
-    SHELLEXECUTEINFO sei = { 0 };
-    sei.cbSize = sizeof(SHELLEXECUTEINFO);
-    sei.fMask = SEE_MASK_NOCLOSEPROCESS;
-    sei.lpFile = SERVER_EXE;
-    sei.nShow = SW_SHOWNORMAL;
+		int iResult = recv(ConnectSocket, answer, DEFAULT_BUFLEN, 0);
+		answer[iResult] = '\0';
 
-    if (ShellExecuteEx(&sei)) {
-        cout << "Server launched successfully!" << endl;
-        return true;
-    }
-    else {
-        cout << "Failed to launch server. Error: " << GetLastError() << endl;
-        return false;
-    }
+		if (iResult > 0) {
+			cout << "\nThe server process sent the message: " << answer << "\n";
+			// cout << "байтів отримано: " << iResult << "\n";
+		}
+		else if (iResult == 0)
+			cout << "the connection to the server is closed.\n";
+		else
+			cout << "reception error: " << WSAGetLastError() << "\n";
+	}
+	return 0;
 }
 
-int main(int argc, char** argv) 
+int main()
 {
-    system("title CLIENT SIDE");
+	SetConsoleOutputCP(1251);
+	system("title CLIENT SIDE");
 
 
-    WSADATA wsaData;
-    int iResult = WSAStartup(MAKEWORD(2, 2), &wsaData);
-    if (iResult != 0) {
-        return 11;
-    }
+	// ініціалізація Winsock
+	WSADATA wsaData;
+	int iResult = WSAStartup(MAKEWORD(2, 2), &wsaData);
+	if (iResult != 0) {
+		cout << "failed to initialize Winsock: " << iResult << "\n";
+		return 11;
+	}
+	else {
+		// cout << "підключення Winsock.dll пройшло успішно!\n";
+		Sleep(PAUSE);
+	}
 
-    addrinfo hints;
-    ZeroMemory(&hints, sizeof(hints));
-    hints.ai_family = AF_UNSPEC;
-    hints.ai_socktype = SOCK_STREAM;
-    hints.ai_protocol = IPPROTO_TCP;
-
-    const char* ip = "localhost"; 
-
-    addrinfo* result = NULL;
-    iResult = getaddrinfo(ip, DEFAULT_PORT, &hints, &result);
-
-    if (iResult != 0) {
-        WSACleanup();
-        return 12;
-    }
-
-    SOCKET ConnectSocket = INVALID_SOCKET;
-    bool serverStarted = false;
-
-    while (ConnectSocket == INVALID_SOCKET) {
-        for (addrinfo* ptr = result; ptr != NULL; ptr = ptr->ai_next) {
-            ConnectSocket = socket(ptr->ai_family, ptr->ai_socktype, ptr->ai_protocol);
-
-            if (ConnectSocket == INVALID_SOCKET) {
-                WSACleanup();
-                return 13;
-            }
-
-            iResult = connect(ConnectSocket, ptr->ai_addr, (int)ptr->ai_addrlen);
-            if (iResult == SOCKET_ERROR) {
-                closesocket(ConnectSocket);
-                ConnectSocket = INVALID_SOCKET;
-                continue;
-            }
-
-            break;
-        }
-
-        if (ConnectSocket == INVALID_SOCKET) {
-            if (!serverStarted) {
-                cout << "Server is not running. Starting server..." << endl;
-                if (!StartServer()) {
-                    cout << "Failed to start server!" << endl;
-                    WSACleanup();
-                    return 14;
-                }
-                serverStarted = true;
-            }
-            else {
-                cout << "It is impossible to connect to the server. Check if the server process is running!" << endl;
-                WSACleanup();
-                return 15;
-            }
-        }
-        else {
-            cout << "Connection to the server was successful!" << endl;
-        }
-    }
-    
+	addrinfo hints;
+	ZeroMemory(&hints, sizeof(hints));
+	hints.ai_family = AF_UNSPEC;
+	hints.ai_socktype = SOCK_STREAM;
+	hints.ai_protocol = IPPROTO_TCP;
 
 
-    while (true)
-    {
-        char message[DEFAULT_BUFLEN];
-        cout << "Enter a number (or 'exit' to quit): ";
-        cin.getline(message, DEFAULT_BUFLEN);
+	const char* ip = "localhost"; // за замовчуванням, обидва додатки, і клієнт, і сервер, працюють на одній машині
 
-        iResult = send(ConnectSocket, message, strlen(message), 0);
+	addrinfo* result = NULL;
+	iResult = getaddrinfo(ip, DEFAULT_PORT, &hints, &result);
 
-        if (iResult == SOCKET_ERROR) {
-            closesocket(ConnectSocket);
-            WSACleanup();
-            return 15;
-        }
+	if (iResult != 0) {
+		cout << "getaddrinfo failed: " << iResult << "\n";
+		WSACleanup();
+		return 12;
+	}
+	else {
+		// cout << "отримання адреси і порту клієнта пройшло успішно!\n";
+		Sleep(PAUSE);
+	}
 
-        char answer[DEFAULT_BUFLEN];
 
-        iResult = recv(ConnectSocket, answer, DEFAULT_BUFLEN, 0);
-        answer[iResult] = '\0';
 
-        if (iResult > 0) {
-            cout << "the server process sent a response: " << answer << "\n";
-        }
-        else 
-        {
-            break;
-        }
-    }
+	for (addrinfo* ptr = result; ptr != NULL; ptr = ptr->ai_next) { // серверів може бути кілька, тому не завадить цикл
 
-    iResult = shutdown(ConnectSocket, SD_SEND);
-    if (iResult == SOCKET_ERROR) 
-    {
-        closesocket(ConnectSocket);
-        WSACleanup();
-        return 16;
-    }
+		// створення SOCKET для підключення до сервера
+		ConnectSocket = socket(ptr->ai_family, ptr->ai_socktype, ptr->ai_protocol);
 
-    closesocket(ConnectSocket);
-    WSACleanup();
+		if (ConnectSocket == INVALID_SOCKET) {
+			cout << "failed to create socket: " << WSAGetLastError() << "\n";
+			WSACleanup();
+			return 13;
+		}
 
-    cout << "the client process completes its work!\n";
+		iResult = connect(ConnectSocket, ptr->ai_addr, (int)ptr->ai_addrlen);
+		if (iResult == SOCKET_ERROR) {
+			closesocket(ConnectSocket);
+			ConnectSocket = INVALID_SOCKET;
+			continue;
+		}
+		Sleep(PAUSE);
 
-    return 0;
+		break;
+	}
+
+
+	freeaddrinfo(result);
+
+	if (ConnectSocket == INVALID_SOCKET) {
+		cout << "unable to connect to server!\n";
+		WSACleanup();
+		return 14;
+	}
+	else {;
+		Sleep(PAUSE);
+	}
+
+
+	CreateThread(0, 0, Sender, 0, 0, 0);
+
+	CreateThread(0, 0, Receiver, 0, 0, 0);
+
+	Sleep(INFINITE);
 }
