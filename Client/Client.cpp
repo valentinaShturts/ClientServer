@@ -1,81 +1,156 @@
-﻿#include <iostream>
-#include <winsock2.h>
+﻿
+#define WIN32_LEAN_AND_MEAN
+
+#include <iostream>
+#include <windows.h>
+// #include <winsock2.h>
+#include <ws2tcpip.h>
+#include <string>
+
 using namespace std;
 
-#pragma comment(lib,"ws2_32.lib") // подключение библиотеки winsock
-#pragma warning(disable:4996)
+#pragma comment (lib, "Ws2_32.lib")
+#pragma comment (lib, "Mswsock.lib")
+#pragma comment (lib, "AdvApi32.lib")
 
-#define SERVER "127.0.0.1" // ip-адрес сервера (локальный хост)
-#define BUFLEN 512 // максимальная длина ответа
-#define PORT 8888 // порт для приема данных
+#define DEFAULT_BUFLEN 512
+#define DEFAULT_PORT "27015"
 
-class UDPClient {
-public:
-    UDPClient() {
-        // инициализация winsock
-        cout << "initializing winsock...\n";
-        if (WSAStartup(MAKEWORD(2, 2), &ws) != 0) {
-            cout << "initialization error. error code:" << WSAGetLastError() << "\n";
-            exit(EXIT_FAILURE);
-        }
-        cout << "initialization complete.\n";
+#define PAUSE 0
 
-        // создание сокета
-        if ((client_socket = socket(AF_INET, SOCK_DGRAM, IPPROTO_UDP)) == SOCKET_ERROR) {
-            cout << "socket creation error. error code: " << WSAGetLastError() << "\n";
-            exit(EXIT_FAILURE);
-        }
 
-        // настройка структуры адреса сервера
-        memset((char*)&server, 0, sizeof(server));
-        server.sin_family = AF_INET;
-        server.sin_port = htons(PORT);
-        server.sin_addr.S_un.S_addr = inet_addr(SERVER);
+bool SendMessageToServer(SOCKET ConnectSocket, const string& message) 
+{
+    int iResult = send(ConnectSocket, message.c_str(), message.length(), 0);
+    if (iResult == SOCKET_ERROR) 
+    {
+        cout << "Error sending data!\n";
+        return false;
     }
 
-    ~UDPClient() {
-        // закрытие сокета и очистка winsock
-        closesocket(client_socket);
+    char answer[DEFAULT_BUFLEN];
+    iResult = recv(ConnectSocket, answer, DEFAULT_BUFLEN, 0);
+    if (iResult > 0) 
+    {
+        answer[iResult] = '\0';
+        cout << "Server response: " << answer << endl;
+        return true;
+    }
+    else 
+    {
+        cout << "The connection with the server is broken!\n";
+        return false;
+    }
+}
+
+int main(int argc, char** argv)
+{
+    system("title CLIENT SIDE");
+
+    WSADATA wsaData;
+    int iResult = WSAStartup(MAKEWORD(2, 2), &wsaData);
+    if (iResult != 0) {
+        return 11;
+    }
+
+    
+
+    addrinfo hints;
+    ZeroMemory(&hints, sizeof(hints));
+    hints.ai_family = AF_UNSPEC;
+    hints.ai_socktype = SOCK_STREAM;
+    hints.ai_protocol = IPPROTO_TCP;
+
+    const char* ip = "localhost";
+
+    addrinfo* result = NULL;
+    iResult = getaddrinfo(ip, DEFAULT_PORT, &hints, &result);
+
+    if (iResult != 0) {
         WSACleanup();
+        return 12;
     }
 
-    void start() {
-        while (true) {
-            char message[BUFLEN];
-            cout << "enter message: ";
-            cin.getline(message, BUFLEN);
+    SOCKET ConnectSocket = INVALID_SOCKET;
+    for (addrinfo* ptr = result; ptr != NULL; ptr = ptr->ai_next) {
 
-            // отправка сообщения серверу
-            if (sendto(client_socket, message, strlen(message), 0, (sockaddr*)&server, sizeof(sockaddr_in)) == SOCKET_ERROR) {
-                cout << "sending error. error code: " << WSAGetLastError() << "\n";
-                exit(EXIT_FAILURE);
+        ConnectSocket = socket(ptr->ai_family, ptr->ai_socktype, ptr->ai_protocol);
+        
+
+        if (ConnectSocket == INVALID_SOCKET) {
+            WSACleanup();
+            return 13;
+        }
+
+        iResult = connect(ConnectSocket, ptr->ai_addr, (int)ptr->ai_addrlen);
+        if (iResult == SOCKET_ERROR) {
+            closesocket(ConnectSocket);
+            ConnectSocket = INVALID_SOCKET;
+            continue;
+        }
+
+        break;
+    }
+
+    freeaddrinfo(result);
+    
+    if (ConnectSocket == INVALID_SOCKET) {
+        cout << "it is impossible to connect to the server. check if the server process is running!\n";
+        WSACleanup();
+        return 14;
+    }
+    else {
+
+        cout << "connection to the server was successful!\n";
+    }
+
+
+
+    while (true) 
+    {
+        cout << "\nMenu:\n";
+        cout << "1 - Log in\n";
+        cout << "2 - Sign in\n";
+        cout << "3 - Exit\n";
+        cout << "Enter option: ";
+
+        int choice;
+        cin >> choice;
+        cin.ignore(); 
+
+        string username, password;
+        if (choice == 1 || choice == 2) {
+            cout << "Enter login: ";
+            getline(cin, username);
+            cout << "Enter password: ";
+            getline(cin, password);
+
+            string message = (choice == 1 ? "LOGIN " : "REGISTER ") + username + " " + password;
+            if (!SendMessageToServer(ConnectSocket, message)) {
+                break;
             }
-            cout << "wait for a response from the server...\n";
-
-            // получение ответа от сервера
-            char answer[BUFLEN] = {};
-            int slen = sizeof(sockaddr_in);
-            int answer_length;
-
-            if ((answer_length = recvfrom(client_socket, answer, BUFLEN, 0, (sockaddr*)&server, &slen)) == SOCKET_ERROR) {
-                cout << "data retrieval error. error code:" << WSAGetLastError() << "\n";
-                exit(EXIT_FAILURE);
-            }
-
-            cout << "server response: " << answer << "\n";
+        }
+        else if (choice == 3) {
+            cout << "Exit...\n";
+            break;
+        }
+        else {
+            cout << "Uknown command!\n";
         }
     }
 
-private:
-    WSADATA ws; // данные winsock
-    SOCKET client_socket; // сокет клиента
-    sockaddr_in server; // адрес сервера
-};
+    iResult = shutdown(ConnectSocket, SD_SEND);
+    if (iResult == SOCKET_ERROR) 
+    {
+        closesocket(ConnectSocket);
+        WSACleanup();
+        return 16;
+    }
 
-int main() {
-    system("title UDP CLIENT SIDE");
-    setlocale(0, "");
+    closesocket(ConnectSocket);
+    WSACleanup();
 
-    UDPClient udpClient;
-    udpClient.start();
+    cout << "the client process completes its work!\n";
+
+    return 0;
 }
