@@ -23,16 +23,35 @@ struct User
 };
 
 
-bool RegisterUser(vector<User>& users, const string& username, const string& password) {
-    auto it = find_if(users.begin(), users.end(), [&](const User& u) { return u.username == username; });
-    if (it != users.end()) return false; 
-    users.push_back({ username, password });
-    return true;
+string LoginUser(vector<User>& users, const string& username, const string& password) 
+{
+    for (const auto& user : users) 
+    {
+        if (user.username == username) 
+        {
+            if (user.password == password) 
+            {
+                return "Welcome";
+            }
+            else {
+                return "ERROR: Incorrect password";
+            }
+        }
+    }
+    return "ERROR: Invalid username";
 }
 
-bool LoginUser(vector<User>& users, const string& username, const string& password) {
-    auto it = find_if(users.begin(), users.end(), [&](const User& u) { return u.username == username && u.password == password; });
-    return it != users.end();
+string RegisterUser(vector<User>& users, const string& username, const string& password)
+{
+    for (const auto& user : users) 
+    {
+        if (user.username == username) 
+        {
+            return "ERROR: Username already exists";
+        }
+    }
+    users.push_back({ username, password });
+    return "Welcome"; 
 }
 
 
@@ -116,7 +135,7 @@ int main()
             if (space != string::npos) {
                 string username = request.substr(9, space - 9);
                 string password = request.substr(space + 1);
-                response = RegisterUser(users, username, password) ? "OK" : "ERROR: User exists";
+                response = RegisterUser(users, username, password);
             }
         }
         else if (request.rfind("LOGIN ", 0) == 0) {
@@ -124,7 +143,7 @@ int main()
             if (space != string::npos) {
                 string username = request.substr(6, space - 6);
                 string password = request.substr(space + 1);
-                response = LoginUser(users, username, password) ? "OK" : "ERROR: Invalid credentials";
+                response = LoginUser(users, username, password);
             }
         }
         else {
