@@ -1,150 +1,81 @@
-﻿#define WIN32_LEAN_AND_MEAN
-
-#include <iostream>
-#include <windows.h>
-#include <ws2tcpip.h>
+﻿#include <iostream>
+#include <winsock2.h>
 using namespace std;
 
-#pragma comment (lib, "Ws2_32.lib")
-#pragma comment (lib, "Mswsock.lib")
-#pragma comment (lib, "AdvApi32.lib")
+#pragma comment(lib,"ws2_32.lib") // подключение библиотеки winsock
+#pragma warning(disable:4996)
 
-#define DEFAULT_BUFLEN 512
-#define DEFAULT_PORT "27015"
+#define SERVER "127.0.0.1" // ip-адрес сервера (локальный хост)
+#define BUFLEN 512 // максимальная длина ответа
+#define PORT 8888 // порт для приема данных
 
-#define PAUSE 1
+class UDPClient {
+public:
+    UDPClient() {
+        // инициализация winsock
+        cout << "initializing winsock...\n";
+        if (WSAStartup(MAKEWORD(2, 2), &ws) != 0) {
+            cout << "initialization error. error code:" << WSAGetLastError() << "\n";
+            exit(EXIT_FAILURE);
+        }
+        cout << "initialization complete.\n";
 
-// спроба підключитися до адреси, поки не вдасться
-SOCKET ConnectSocket = INVALID_SOCKET;
+        // создание сокета
+        if ((client_socket = socket(AF_INET, SOCK_DGRAM, IPPROTO_UDP)) == SOCKET_ERROR) {
+            cout << "socket creation error. error code: " << WSAGetLastError() << "\n";
+            exit(EXIT_FAILURE);
+        }
 
-DWORD WINAPI Sender(void* param)
-{
-	while (true)
-	{
-		// відправити початковий буфер
-		char* message = new char[200];
-		cout << "Please enter your message for server: ";
-		cin.getline(message, 199);
+        // настройка структуры адреса сервера
+        memset((char*)&server, 0, sizeof(server));
+        server.sin_family = AF_INET;
+        server.sin_port = htons(PORT);
+        server.sin_addr.S_un.S_addr = inet_addr(SERVER);
+    }
 
-		int iResult = send(ConnectSocket, message, (int)strlen(message), 0);
-		if (iResult == SOCKET_ERROR) {
-			cout << "error of sending: " << WSAGetLastError() << "\n";
-			closesocket(ConnectSocket);
-			WSACleanup();
-			return 15;
-		}
-		else {
-			cout << "data successfully sent to the server: " << message << "\n";
-			// cout << "байтів з клієнта надіслано: " << iResult << "\n";
-			delete[] message;
-			Sleep(PAUSE);
-		}
-	}
-	return 0;
-}
+    ~UDPClient() {
+        // закрытие сокета и очистка winsock
+        closesocket(client_socket);
+        WSACleanup();
+    }
 
-DWORD WINAPI Receiver(void* param)
-{
-	while (true)
-	{
-		// приймати дані, поки співрозмовник не закриє з'єднання
-		char answer[DEFAULT_BUFLEN];
+    void start() {
+        while (true) {
+            char message[BUFLEN];
+            cout << "enter message: ";
+            cin.getline(message, BUFLEN);
 
-		int iResult = recv(ConnectSocket, answer, DEFAULT_BUFLEN, 0);
-		answer[iResult] = '\0';
+            // отправка сообщения серверу
+            if (sendto(client_socket, message, strlen(message), 0, (sockaddr*)&server, sizeof(sockaddr_in)) == SOCKET_ERROR) {
+                cout << "sending error. error code: " << WSAGetLastError() << "\n";
+                exit(EXIT_FAILURE);
+            }
+            cout << "wait for a response from the server...\n";
 
-		if (iResult > 0) {
-			cout << "\nThe server process sent the message: " << answer << "\n";
-			// cout << "байтів отримано: " << iResult << "\n";
-		}
-		else if (iResult == 0)
-			cout << "the connection to the server is closed.\n";
-		else
-			cout << "reception error: " << WSAGetLastError() << "\n";
-	}
-	return 0;
-}
+            // получение ответа от сервера
+            char answer[BUFLEN] = {};
+            int slen = sizeof(sockaddr_in);
+            int answer_length;
 
-int main()
-{
-	SetConsoleOutputCP(1251);
-	system("title CLIENT SIDE");
+            if ((answer_length = recvfrom(client_socket, answer, BUFLEN, 0, (sockaddr*)&server, &slen)) == SOCKET_ERROR) {
+                cout << "data retrieval error. error code:" << WSAGetLastError() << "\n";
+                exit(EXIT_FAILURE);
+            }
 
+            cout << "server response: " << answer << "\n";
+        }
+    }
 
-	// ініціалізація Winsock
-	WSADATA wsaData;
-	int iResult = WSAStartup(MAKEWORD(2, 2), &wsaData);
-	if (iResult != 0) {
-		cout << "failed to initialize Winsock: " << iResult << "\n";
-		return 11;
-	}
-	else {
-		// cout << "підключення Winsock.dll пройшло успішно!\n";
-		Sleep(PAUSE);
-	}
+private:
+    WSADATA ws; // данные winsock
+    SOCKET client_socket; // сокет клиента
+    sockaddr_in server; // адрес сервера
+};
 
-	addrinfo hints;
-	ZeroMemory(&hints, sizeof(hints));
-	hints.ai_family = AF_UNSPEC;
-	hints.ai_socktype = SOCK_STREAM;
-	hints.ai_protocol = IPPROTO_TCP;
+int main() {
+    system("title UDP CLIENT SIDE");
+    setlocale(0, "");
 
-
-	const char* ip = "localhost"; // за замовчуванням, обидва додатки, і клієнт, і сервер, працюють на одній машині
-
-	addrinfo* result = NULL;
-	iResult = getaddrinfo(ip, DEFAULT_PORT, &hints, &result);
-
-	if (iResult != 0) {
-		cout << "getaddrinfo failed: " << iResult << "\n";
-		WSACleanup();
-		return 12;
-	}
-	else {
-		// cout << "отримання адреси і порту клієнта пройшло успішно!\n";
-		Sleep(PAUSE);
-	}
-
-
-
-	for (addrinfo* ptr = result; ptr != NULL; ptr = ptr->ai_next) { // серверів може бути кілька, тому не завадить цикл
-
-		// створення SOCKET для підключення до сервера
-		ConnectSocket = socket(ptr->ai_family, ptr->ai_socktype, ptr->ai_protocol);
-
-		if (ConnectSocket == INVALID_SOCKET) {
-			cout << "failed to create socket: " << WSAGetLastError() << "\n";
-			WSACleanup();
-			return 13;
-		}
-
-		iResult = connect(ConnectSocket, ptr->ai_addr, (int)ptr->ai_addrlen);
-		if (iResult == SOCKET_ERROR) {
-			closesocket(ConnectSocket);
-			ConnectSocket = INVALID_SOCKET;
-			continue;
-		}
-		Sleep(PAUSE);
-
-		break;
-	}
-
-
-	freeaddrinfo(result);
-
-	if (ConnectSocket == INVALID_SOCKET) {
-		cout << "unable to connect to server!\n";
-		WSACleanup();
-		return 14;
-	}
-	else {;
-		Sleep(PAUSE);
-	}
-
-
-	CreateThread(0, 0, Sender, 0, 0, 0);
-
-	CreateThread(0, 0, Receiver, 0, 0, 0);
-
-	Sleep(INFINITE);
+    UDPClient udpClient;
+    udpClient.start();
 }

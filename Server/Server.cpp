@@ -1,179 +1,94 @@
-﻿#define WIN32_LEAN_AND_MEAN // для пришвидшення процесу компіляції: https://stackoverflow.com/questions/11040133/what-does-defining-win32-lean-and-mean-exclude-exactly
-
-#include <iostream>
-#include <windows.h>
-#include <ws2tcpip.h> // тип WSADATA; функції WSAStartup, WSACleanup та багато інших
+﻿#include <iostream>
+#include <winsock2.h>
 using namespace std;
 
-#pragma comment (lib, "Ws2_32.lib")
+#pragma comment(lib,"ws2_32.lib") // библиотека winsock
+#pragma warning(disable:4996) 
 
-#define DEFAULT_BUFLEN 512
-#define DEFAULT_PORT "27015" // порт — це логічна конструкція, що ідентифікує конкретний процес або тип мережевої служби - https://en.wikipedia.org/wiki/Port_(computer_networking)
+#define BUFLEN 512 // размер буфера
+#define PORT 8888 // порт сервера
 
-#define PAUSE 1
+class UDPServer {
+public:
+    UDPServer() {
+        // инициализация winsock
+        cout << "initializing winsock...\n";
+        if (WSAStartup(MAKEWORD(2, 2), &wsa) != 0) {
+            cout << "initialization error: " << WSAGetLastError() << "\n";
+            exit(0);
+        }
+        cout << "initialization complete.\n";
 
-// прийом клієнтського сокета
-SOCKET ClientSocket = INVALID_SOCKET;
+        // создание сокета
+        if ((server_socket = socket(AF_INET, SOCK_DGRAM, 0)) == INVALID_SOCKET) {
+            cout << "failed to create socket: " << WSAGetLastError() << "\n";
+            exit(EXIT_FAILURE);
+        }
+        cout << "the socket has been created.\n";
 
-DWORD WINAPI Sender(void* param)
-{
-	while (true) {
-		// надаємо відповідь відправнику
-		char* answer = new char[200];
-		cout << "Please enter a message for the client: ";
-		cin.getline(answer, 199);
+        // настройка структуры sockaddr_in
+        server.sin_family = AF_INET;
+        server.sin_addr.s_addr = INADDR_ANY;
+        server.sin_port = htons(PORT);
 
-		cout << "the server process sends a response: " << answer << "\n";
+        // привязка сокета
+        if (bind(server_socket, (sockaddr*)&server, sizeof(server)) == SOCKET_ERROR) {
+            cout << "binding error: " << WSAGetLastError() << "\n";
+            exit(EXIT_FAILURE);
+        }
+        cout << "binding completed.\n";
+    }
 
-		int iSendResult = send(ClientSocket, answer, strlen(answer), 0); // функція send відправляє дані по з'єднаному сокету: https://docs.microsoft.com/en-us/windows/win32/api/winsock2/nf-winsock2-send
+    ~UDPServer() {
+        closesocket(server_socket);
+        WSACleanup();
+    }
 
-		Sleep(PAUSE);
+    void start() {
+        while (!exitRequested) {
+            cout << "wait for data from the client...\n";
+            char message[BUFLEN] = {};
 
-		//////////////////////////////////////////////////////////////////////////////////////////////////////////
+            // получение данных (блокирующий вызов)
+            int message_len;
+            int slen = sizeof(sockaddr_in);
+            if ((message_len = recvfrom(server_socket, message, BUFLEN, 0, (sockaddr*)&client, &slen)) == SOCKET_ERROR) {
+                cout << "recvfrom() error: " << WSAGetLastError() << "\n";
+                exit(0);
+            }
 
-		if (iSendResult == SOCKET_ERROR) {
-			cout << "sending failed with error: " << WSAGetLastError() << "\n";
-			cout << "oops, sending (send) the corresponding message did not take place ((\n";
-			closesocket(ClientSocket);
-			WSACleanup();
-			return 7;
-		}
-		else {
-			//cout << "байтів відправлено: " << iSendResult << "\n";
-			Sleep(PAUSE);
-		}
-	}
+            // вывод информации о клиенте и полученных данных
+            cout << "received a package from" << inet_ntoa(client.sin_addr) << " " << ntohs(client.sin_port) << "\n";
+            cout << "data: " << message << "\n";
 
-	return 0;
-}
+            cout << "enter the answer ('exit' to exit): ";
+            cin.getline(message, BUFLEN);
 
-DWORD WINAPI Receiver(void* param)
-{
-	while (true) {
-		char message[DEFAULT_BUFLEN];
+            // отправка ответа клиенту
+            if (sendto(server_socket, message, strlen(message), 0, (sockaddr*)&client, sizeof(sockaddr_in)) == SOCKET_ERROR) {
+                cout << "sendto() error: " << WSAGetLastError() << "\n";
+                exit(EXIT_FAILURE);
+            }
 
-		int iResult = recv(ClientSocket, message, DEFAULT_BUFLEN, 0); // функція recv використовується для читання вхідних даних: https://docs.microsoft.com/en-us/windows/win32/api/winsock/nf-winsock-recv
-		message[iResult] = '\0';
+            if (strcmp(message, "exit") == 0) {
+                cout << "shutting down the server...\n";
+                exitRequested = true;
+                break;
+            }
+        }
+    }
 
-		if (iResult > 0) {
-			cout << "\nthe client process sent the message: " << message << "\n";
-			Sleep(PAUSE);
-			//cout << "байтів отримано: " << iResult << "\n";
-			Sleep(PAUSE);
-		}
-	}
-	return 0;
-}
+private:
+    WSADATA wsa{};
+    SOCKET server_socket = 0;
+    sockaddr_in server{}, client{};
+    bool exitRequested = false;
+};
 
-int main()
-{
-	SetConsoleOutputCP(1251);
-	system("title SERVER SIDE");
-	// cout << "процес сервера запущено!\n";
-	Sleep(PAUSE);
+int main() {
+    system("title UDP SERVER SIDE");
+    setlocale(0, "");
 
-
-	// ініціалізація Winsock
-	WSADATA wsaData; // структура WSADATA містить інформацію про реалізацію Windows Sockets: https://docs.microsoft.com/en-us/windows/win32/api/winsock/ns-winsock-wsadata
-	int iResult = WSAStartup(MAKEWORD(2, 2), &wsaData); // функція WSAStartup ініціалізує використання DLL Winsock процесом: https://firststeps.ru/mfc/net/socket/r.php?2
-	if (iResult != 0) {
-		cout << "WSAStartup failed with the error: " << iResult << "\n";
-		cout << "Winsock.dll connection failed!\n";
-		return 1;
-	}
-	else {
-		// cout << "підключення Winsock.dll пройшло успішно!\n";
-		Sleep(PAUSE);
-	}
-
-
-	struct addrinfo hints; // структура addrinfo використовується функцією getaddrinfo для зберігання інформації про хост-адресу: https://docs.microsoft.com/en-us/windows/win32/api/ws2def/ns-ws2def-addrinfoa
-	ZeroMemory(&hints, sizeof(hints));
-	hints.ai_family = AF_INET; // сімейство адрес Інтернет-протоколу версії 4 (IPv4)
-	hints.ai_socktype = SOCK_STREAM; // забезпечує послідовні, надійні, двосторонні потоки з'єднань з механізмом передачі даних
-	hints.ai_protocol = IPPROTO_TCP; // протокол TCP (Transmission Control Protocol). Це можливе значення, коли член ai_family є AF_INET або AF_INET6 і член ai_socktype є SOCK_STREAM
-	hints.ai_flags = AI_PASSIVE; // адреса сокета буде використовуватися в виклику функції "bind"
-
-	// отримання адреси та порту сервера
-	struct addrinfo* result = NULL;
-	iResult = getaddrinfo(NULL, DEFAULT_PORT, &hints, &result);
-	if (iResult != 0) {
-		cout << "getaddrinfo failed with error: " << iResult << "\n";
-		cout << "getting server address and port failed!\n";
-		WSACleanup(); // функція WSACleanup завершує використання DLL Winsock 2 (Ws2_32.dll): https://docs.microsoft.com/en-us/windows/win32/api/winsock/nf-winsock-wsacleanup
-		return 2;
-	}
-	else {
-		// cout << "отримання адреси та порту сервера пройшло успішно!\n";
-		Sleep(PAUSE);
-	}
-
-
-	// створення SOCKET для підключення до сервера
-	SOCKET ListenSocket = INVALID_SOCKET;
-	ListenSocket = socket(result->ai_family, result->ai_socktype, result->ai_protocol);
-	if (ListenSocket == INVALID_SOCKET) {
-		cout << "socket failed to create with error: " << WSAGetLastError() << "\n";
-		cout << "socket creation failed!\n";
-		freeaddrinfo(result);
-		WSACleanup();
-
-		return 3;
-	}
-	else {
-		// cout << "створення сокета на сервері пройшло успішно!\n";
-		Sleep(PAUSE);
-	}
-
-
-	iResult = bind(ListenSocket, result->ai_addr, (int)result->ai_addrlen); // функція bind асоціює локальну адресу з сокетом: https://docs.microsoft.com/en-us/windows/win32/api/winsock/nf-winsock-bind
-	if (iResult == SOCKET_ERROR) {
-		cout << "bind failed with error: " << WSAGetLastError() << "\n";
-		cout << "socket insertion by IP address failed!\n";
-		freeaddrinfo(result);
-		closesocket(ListenSocket);
-		WSACleanup();
-		return 4;
-	}
-	else {
-		// cout << "внедрення сокета за IP-адресою пройшло успішно!\n";
-		Sleep(PAUSE);
-	}
-
-	freeaddrinfo(result);
-
-
-	iResult = listen(ListenSocket, SOMAXCONN); 
-	if (iResult == SOCKET_ERROR) {
-		cout << "listen failed with error: " << WSAGetLastError() << "\n";
-		cout << "listening from the client has not started. something went wrong!\n";
-		closesocket(ListenSocket);
-		WSACleanup();
-		return 5;
-	}
-	else {
-		cout << "please run client.exe\n";
-		// тут можна було б запустити якийсь прелоадер в окремому потоці
-	}
-
-
-	ClientSocket = accept(ListenSocket, NULL, NULL); 
-	if (ClientSocket == INVALID_SOCKET) {
-		cout << "accept failed with error: " << WSAGetLastError() << "\n";
-		cout << "connection with the client application is not established! sadly!\n";
-		closesocket(ListenSocket);
-		WSACleanup();
-		return 6;
-	}
-	else {
-		// cout << "з'єднання з клієнтським додатком встановлено успішно!\n";
-	}
-
-
-	CreateThread(0, 0, Receiver, 0, 0, 0);
-
-	CreateThread(0, 0, Sender, 0, 0, 0);
-
-
-	Sleep(INFINITE);
+    UDPServer udpServer;
+    udpServer.start();
 }
