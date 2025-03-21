@@ -13,45 +13,24 @@ using namespace std;
 
 #define DEFAULT_BUFLEN 512
 #define DEFAULT_PORT "27015" 
-#define PAUSE 0
+
+#define SCREEN_WIDTH 20
+#define SCREEN_HEIGHT 10
 
 
-struct User 
+void DrawSmiley(int x, int y) 
 {
-    string username;
-    string password;
-};
-
-
-string LoginUser(vector<User>& users, const string& username, const string& password) 
-{
-    for (const auto& user : users) 
+    for (int i = 0; i < SCREEN_HEIGHT; i++) 
     {
-        if (user.username == username) 
+        for (int j = 0; j < SCREEN_WIDTH; j++) 
         {
-            if (user.password == password) 
-            {
-                return "Welcome";
-            }
-            else {
-                return "ERROR: Incorrect password";
-            }
+            if (i == y && j == x)
+                cout << ":)";
+            else
+                cout << "  ";
         }
+        cout << endl;
     }
-    return "ERROR: Invalid username";
-}
-
-string RegisterUser(vector<User>& users, const string& username, const string& password)
-{
-    for (const auto& user : users) 
-    {
-        if (user.username == username) 
-        {
-            return "ERROR: Username already exists";
-        }
-    }
-    users.push_back({ username, password });
-    return "Welcome"; 
 }
 
 
@@ -59,7 +38,6 @@ int main()
 {
     system("title SERVER SIDE");
 
-    vector<User> users;
     WSADATA wsaData;
     int iResult = WSAStartup(MAKEWORD(2, 2), &wsaData);
 
@@ -122,35 +100,26 @@ int main()
 
     closesocket(ListenSocket);
     char recvbuf[DEFAULT_BUFLEN];
-    while (true) {
+
+    int x = 5, y = 5;
+    while (true) 
+    {
         ZeroMemory(recvbuf, DEFAULT_BUFLEN);
         iResult = recv(ClientSocket, recvbuf, DEFAULT_BUFLEN, 0);
         if (iResult <= 0) break;
 
-        string request(recvbuf);
-        string response;
-
-        if (request.rfind("REGISTER ", 0) == 0) {
-            size_t space = request.find(' ', 9);
-            if (space != string::npos) {
-                string username = request.substr(9, space - 9);
-                string password = request.substr(space + 1);
-                response = RegisterUser(users, username, password);
+        int newX, newY;
+        if (sscanf_s(recvbuf, "%d %d", &newX, &newY) == 2) 
+        {
+            if (newX >= 0 && newX < SCREEN_WIDTH && newY >= 0 && newY < SCREEN_HEIGHT) 
+            {
+                x = newX;
+                y = newY;
             }
         }
-        else if (request.rfind("LOGIN ", 0) == 0) {
-            size_t space = request.find(' ', 6);
-            if (space != string::npos) {
-                string username = request.substr(6, space - 6);
-                string password = request.substr(space + 1);
-                response = LoginUser(users, username, password);
-            }
-        }
-        else {
-            response = "ERROR: Unknown command";
-        }
 
-        send(ClientSocket, response.c_str(), response.length(), 0);
+        system("cls");
+        DrawSmiley(x, y);
     }
 
     iResult = shutdown(ClientSocket, SD_SEND);

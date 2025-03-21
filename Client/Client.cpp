@@ -3,7 +3,8 @@
 
 #include <iostream>
 #include <windows.h>
-// #include <winsock2.h>
+#include <conio.h>
+#include <winsock2.h>
 #include <ws2tcpip.h>
 #include <string>
 
@@ -14,32 +15,25 @@ using namespace std;
 #pragma comment (lib, "AdvApi32.lib")
 
 #define DEFAULT_BUFLEN 512
+#define SERVER_IP "127.0.0.1"
 #define DEFAULT_PORT "27015"
 
-#define PAUSE 0
+#define SCREEN_WIDTH 20
+#define SCREEN_HEIGHT 10
 
 
-bool SendMessageToServer(SOCKET ConnectSocket, const string& message) 
+void DrawSmiley(int x, int y) 
 {
-    int iResult = send(ConnectSocket, message.c_str(), message.length(), 0);
-    if (iResult == SOCKET_ERROR) 
+    for (int i = 0; i < SCREEN_HEIGHT; i++) 
     {
-        cout << "Error sending data!\n";
-        return false;
-    }
-
-    char answer[DEFAULT_BUFLEN];
-    iResult = recv(ConnectSocket, answer, DEFAULT_BUFLEN, 0);
-    if (iResult > 0) 
-    {
-        answer[iResult] = '\0';
-        cout << "Server response: " << answer << endl;
-        return true;
-    }
-    else 
-    {
-        cout << "The connection with the server is broken!\n";
-        return false;
+        for (int j = 0; j < SCREEN_WIDTH; j++) 
+        {
+            if (i == y && j == x)
+                cout << ":)"; 
+            else
+                cout << "  ";
+        }
+        cout << endl;
     }
 }
 
@@ -106,37 +100,27 @@ int main(int argc, char** argv)
 
 
 
+    int x = 5, y = 5; 
+
     while (true) 
     {
-        cout << "\nMenu:\n";
-        cout << "1 - Log in\n";
-        cout << "2 - Sign in\n";
-        cout << "3 - Exit\n";
-        cout << "Enter option: ";
+        system("cls");
+        DrawSmiley(x, y);
 
-        int choice;
-        cin >> choice;
-        cin.ignore(); 
+        char key = _getch();  
+        if (key == 27) break; 
 
-        string username, password;
-        if (choice == 1 || choice == 2) {
-            cout << "Enter login: ";
-            getline(cin, username);
-            cout << "Enter password: ";
-            getline(cin, password);
+        switch (key) 
+        {
+        case 'w': case 'W': case 72: if (y > 0) y--; break;
+        case 's': case 'S': case 80: if (y < SCREEN_HEIGHT - 1) y++; break;
+        case 'a': case 'A': case 75: if (x > 0) x--; break;
+        case 'd': case 'D': case 77: if (x < SCREEN_WIDTH - 1) x++; break;
+        }
 
-            string message = (choice == 1 ? "LOGIN " : "REGISTER ") + username + " " + password;
-            if (!SendMessageToServer(ConnectSocket, message)) {
-                break;
-            }
-        }
-        else if (choice == 3) {
-            cout << "Exit...\n";
-            break;
-        }
-        else {
-            cout << "Uknown command!\n";
-        }
+        char message[10];
+        sprintf_s(message, "%03d %03d", x, y);
+        send(ConnectSocket, message, (int)strlen(message), 0);
     }
 
     iResult = shutdown(ConnectSocket, SD_SEND);
