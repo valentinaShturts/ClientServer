@@ -1,139 +1,179 @@
-﻿#define WIN32_LEAN_AND_MEAN 
-
+﻿#include <winsock2.h>
 #include <iostream>
-#include <windows.h>
-// #include <winsock2.h>
-#include <ws2tcpip.h>
-#include <cstdlib>
 #include <vector>
+#include <string>
 using namespace std;
 
-#pragma comment (lib, "Ws2_32.lib")
-// #pragma comment (lib, "Mswsock.lib")
+#define MAX_CLIENTS 10
+#define DEFAULT_BUFLEN 4096
 
-#define DEFAULT_BUFLEN 512
-#define DEFAULT_PORT "27015" 
+#pragma comment(lib, "ws2_32.lib")
+#pragma warning(disable:4996)
 
-#define SCREEN_WIDTH 20
-#define SCREEN_HEIGHT 10
+SOCKET server_socket;
+
+vector<string> history;         // история сообщений
+vector<sockaddr_in> clients;    // список адресов клиентов
 
 
-void DrawSmiley(int x, int y) 
+
+void SetConsoleColor(int colorCode)
 {
-    for (int i = 0; i < SCREEN_HEIGHT; i++) 
-    {
-        for (int j = 0; j < SCREEN_WIDTH; j++) 
-        {
-            if (i == y && j == x)
-                cout << ":)";
-            else
-                cout << "  ";
-        }
-        cout << endl;
-    }
+    HANDLE hConsole = GetStdHandle(STD_OUTPUT_HANDLE);
+    SetConsoleTextAttribute(hConsole, colorCode);
 }
 
-
-int main()
+int checkLeftChat(const string& msg) 
 {
-    system("title SERVER SIDE");
+    if (msg.find("left the chat") != string::npos) 
+    {
+        return 1; 
+    }
+    return 0;
+}
 
-    WSADATA wsaData;
-    int iResult = WSAStartup(MAKEWORD(2, 2), &wsaData);
+string extractMessage(const string& msg) 
+{
+    size_t pos = msg.find('-');
+    if (pos != string::npos) 
+    {
+        return msg.substr(0, pos);  
+    }
+    return msg;  
+}
 
+int extractColor(const string& msg)
+{
+    size_t pos = msg.find('-');
+    if (pos != string::npos) {
+        try {
+            return stoi(msg.substr(pos + 1)); 
+        }
+        catch (const std::invalid_argument& e) {
+            printf("Invalid color value in message: %s\n", msg.c_str());
+            return -1; 
+        }
+    }
+    return -1;  
+}
 
-    struct addrinfo hints;
-    ZeroMemory(&hints, sizeof(hints));
-    hints.ai_family = AF_INET;
-    hints.ai_socktype = SOCK_STREAM;
-    hints.ai_protocol = IPPROTO_TCP;
-    hints.ai_flags = AI_PASSIVE;
+int main() {
+    setlocale(0, "");
+    system("title UDP SERVER SIDE");
 
+    puts("Starting the server... DONE.");
+    WSADATA wsa;
+    // инициализация Winsock
+    if (WSAStartup(MAKEWORD(2, 2), &wsa) != 0) {
+        printf("Initialization error. Error code: %d", WSAGetLastError());
+        return 1;
+    }
 
-    struct addrinfo* result = NULL;
-    iResult = getaddrinfo(NULL, DEFAULT_PORT, &hints, &result);
-    if (iResult != 0) {
-        WSACleanup();
+    // создание UDP-сокета
+    if ((server_socket = socket(AF_INET, SOCK_DGRAM, IPPROTO_UDP)) == INVALID_SOCKET) {
+        printf("Failed to create socket: %d", WSAGetLastError());
         return 2;
     }
 
+    sockaddr_in server;
+    server.sin_family = AF_INET;
+    server.sin_addr.s_addr = INADDR_ANY;
+    server.sin_port = htons(8888);
 
-    SOCKET ListenSocket = INVALID_SOCKET;
-    ListenSocket = socket(result->ai_family, result->ai_socktype, result->ai_protocol);
-    if (ListenSocket == INVALID_SOCKET) {
-        freeaddrinfo(result);
+    // привязка сокета к адресу и порту
+    if (bind(server_socket, (sockaddr*)&server, sizeof(server)) == SOCKET_ERROR) {
+        printf("Binding error with code: %d", WSAGetLastError());
+        closesocket(server_socket);
         WSACleanup();
-
         return 3;
     }
 
-    iResult = bind(ListenSocket, result->ai_addr, (int)result->ai_addrlen);
-    if (iResult == SOCKET_ERROR) {
-        freeaddrinfo(result);
-        closesocket(ListenSocket);
-        WSACleanup();
-        return 4;
-    }
+    puts("The server is waiting for incoming UDP messages...\nStart one or more clients.");
 
-    freeaddrinfo(result);
+    fd_set readfds;
+    char client_message[DEFAULT_BUFLEN];
+    sockaddr_in client_addr;
+    int addrlen = sizeof(client_addr);
 
-    iResult = listen(ListenSocket, SOMAXCONN);
-    if (iResult == SOCKET_ERROR) {
-        closesocket(ListenSocket);
-        WSACleanup();
-        return 5;
-    }
-    else {
-        cout << "listening to information from the client begins. please launch the client! (client.exe)\n";
-    }
+    while (true) {
+        // очистка набора сокетов
+        FD_ZERO(&readfds);
+        FD_SET(server_socket, &readfds);
 
-    SOCKET ClientSocket = INVALID_SOCKET;
-    ClientSocket = accept(ListenSocket, NULL, NULL);
-    if (ClientSocket == INVALID_SOCKET) {
-        closesocket(ListenSocket);
-        WSACleanup();
-        return 6;
-    }
-    else {
-        cout << "the connection with the client program has been established successfully!\n";
-    }
-
-    closesocket(ListenSocket);
-    char recvbuf[DEFAULT_BUFLEN];
-
-    int x = 5, y = 5;
-    while (true) 
-    {
-        ZeroMemory(recvbuf, DEFAULT_BUFLEN);
-        iResult = recv(ClientSocket, recvbuf, DEFAULT_BUFLEN, 0);
-        if (iResult <= 0) break;
-
-        int newX, newY;
-        if (sscanf_s(recvbuf, "%d %d", &newX, &newY) == 2) 
-        {
-            if (newX >= 0 && newX < SCREEN_WIDTH && newY >= 0 && newY < SCREEN_HEIGHT) 
-            {
-                x = newX;
-                y = newY;
-            }
+        // ожидание активности на сокете
+        if (select(0, &readfds, NULL, NULL, NULL) == SOCKET_ERROR) {
+            printf("Select function error with code: %d", WSAGetLastError());
+            closesocket(server_socket);
+            WSACleanup();
+            return 4;
         }
 
-        system("cls");
-        DrawSmiley(x, y);
+        if (FD_ISSET(server_socket, &readfds)) {
+            // получение сообщения от клиента
+            int client_message_length = recvfrom(server_socket, client_message, DEFAULT_BUFLEN, 0, (sockaddr*)&client_addr, &addrlen);
+            if (client_message_length < 0) {
+                printf("recvfrom error with code: %d", WSAGetLastError());
+                continue;
+            }
+            client_message[client_message_length] = '\0';
+            string received_msg = client_message;
+            string message_text = extractMessage(received_msg);
+            int color = extractColor(received_msg);
+
+            string formatted_message = message_text;
+            printf("Received from %s:%d %s\n", inet_ntoa(client_addr.sin_addr), ntohs(client_addr.sin_port), formatted_message.c_str());
+
+            // проверка, есть ли клиент в списке
+            bool client_exists = false;
+            for (const auto& addr : clients) {
+                if (addr.sin_addr.s_addr == client_addr.sin_addr.s_addr && addr.sin_port == client_addr.sin_port) {
+                    client_exists = true;
+                    break;
+                }
+            }
+
+            // добавление нового клиента и отправка истории
+            if (!client_exists && clients.size() < MAX_CLIENTS) {
+                clients.push_back(client_addr);
+                printf("A new client has been added. Total clients: %zu\n", clients.size());
+
+                for (const auto& msg : history) {
+                    sendto(server_socket, msg.c_str(), msg.size(), 0, (sockaddr*)&client_addr, addrlen);
+                }
+            }
+
+            // обработка отключения клиента
+            if (checkLeftChat(formatted_message)) 
+            {
+                printf("Client with ip: %s, port: %d disconnected\n", inet_ntoa(client_addr.sin_addr), ntohs(client_addr.sin_port));
+                for (auto it = clients.begin(); it != clients.end(); ++it) {
+                    if (it->sin_addr.s_addr == client_addr.sin_addr.s_addr && it->sin_port == client_addr.sin_port) {
+                        clients.erase(it);
+                        break;
+                    }
+                }
+                for (const auto& addr : clients) 
+                {
+                    if (!(addr.sin_addr.s_addr == client_addr.sin_addr.s_addr && addr.sin_port == client_addr.sin_port)) {
+                        sendto(server_socket, received_msg.c_str(), received_msg.size(), 0, (sockaddr*)&addr, sizeof(addr));
+                    }
+                }
+            }
+            else {
+                // сохранение сообщения в историю
+                history.push_back(received_msg);
+
+                // рассылка сообщения всем клиентам, кроме отправителя
+                for (const auto& addr : clients) {
+                    if (!(addr.sin_addr.s_addr == client_addr.sin_addr.s_addr && addr.sin_port == client_addr.sin_port)) {
+                        sendto(server_socket, received_msg.c_str(), received_msg.size(), 0, (sockaddr*)&addr, sizeof(addr));
+                    }
+                }
+            }
+        }
     }
 
-    iResult = shutdown(ClientSocket, SD_SEND);
-    if (iResult == SOCKET_ERROR) {
-        closesocket(ClientSocket);
-        WSACleanup();
-        return 9;
-    }
-    else {
-        cout << "server process stops working! to new launches! :)\n";
-    }
-
-    closesocket(ClientSocket);
+    closesocket(server_socket);
     WSACleanup();
-
     return 0;
 }
